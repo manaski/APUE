@@ -50,7 +50,11 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
-cmake-build-debug/
 .idea/
-build/
 1_intro/cmake-build-debug
+1_intro/build
+3_file_io/cmake-build-debug
+4_file_and_directory/cmake-build-debug
+4_file_and_directory/build
+5_stdio/build
+5_stdio/cmake-build-debug
