@@ -58,3 +58,5 @@ dkms.conf
 4_file_and_directory/build
 5_stdio/build
 5_stdio/cmake-build-debug
+7_process_env/cmake-build-debug
+8_process_control/cmake-build-debug
