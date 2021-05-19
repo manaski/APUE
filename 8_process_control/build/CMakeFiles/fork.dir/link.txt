@@ -1,0 +1,1 @@
+/usr/bin/cc    CMakeFiles/fork.dir/fork.c.o CMakeFiles/fork.dir/mnt/hgfs/VmShare/APUE/APUE/include/error.c.o CMakeFiles/fork.dir/mnt/hgfs/VmShare/APUE/APUE/lib/tellwait.c.o  -o fork 

@@ -1,0 +1,1 @@
+/usr/bin/cc    CMakeFiles/execshell.dir/execshell.c.o CMakeFiles/execshell.dir/mnt/hgfs/VmShare/APUE/APUE/include/error.c.o CMakeFiles/execshell.dir/mnt/hgfs/VmShare/APUE/APUE/lib/tellwait.c.o  -o execshell 

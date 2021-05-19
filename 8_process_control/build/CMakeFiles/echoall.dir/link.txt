@@ -1,0 +1,1 @@
+/usr/bin/cc    CMakeFiles/echoall.dir/echoall.c.o CMakeFiles/echoall.dir/mnt/hgfs/VmShare/APUE/APUE/include/error.c.o CMakeFiles/echoall.dir/mnt/hgfs/VmShare/APUE/APUE/lib/tellwait.c.o  -o echoall 

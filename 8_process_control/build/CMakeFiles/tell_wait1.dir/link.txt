@@ -1,0 +1,1 @@
+/usr/bin/cc    CMakeFiles/tell_wait1.dir/tell_wait1.c.o CMakeFiles/tell_wait1.dir/mnt/hgfs/VmShare/APUE/APUE/include/error.c.o CMakeFiles/tell_wait1.dir/mnt/hgfs/VmShare/APUE/APUE/lib/tellwait.c.o  -o tell_wait1 

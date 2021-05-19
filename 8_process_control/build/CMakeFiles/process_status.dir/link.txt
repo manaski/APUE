@@ -1,0 +1,1 @@
+/usr/bin/cc    CMakeFiles/process_status.dir/process_status.c.o CMakeFiles/process_status.dir/mnt/hgfs/VmShare/APUE/APUE/include/error.c.o CMakeFiles/process_status.dir/mnt/hgfs/VmShare/APUE/APUE/lib/tellwait.c.o  -o process_status 

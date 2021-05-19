@@ -1,0 +1,12 @@
+/mnt/hgfs/VmShare/APUE/APUE/8_process_control/build/CMakeFiles/rebuild_cache.dir
+/mnt/hgfs/VmShare/APUE/APUE/8_process_control/build/CMakeFiles/edit_cache.dir
+/mnt/hgfs/VmShare/APUE/APUE/8_process_control/build/CMakeFiles/echoall.dir
+/mnt/hgfs/VmShare/APUE/APUE/8_process_control/build/CMakeFiles/execshell.dir
+/mnt/hgfs/VmShare/APUE/APUE/8_process_control/build/CMakeFiles/execv.dir
+/mnt/hgfs/VmShare/APUE/APUE/8_process_control/build/CMakeFiles/fork.dir
+/mnt/hgfs/VmShare/APUE/APUE/8_process_control/build/CMakeFiles/double_fork.dir
+/mnt/hgfs/VmShare/APUE/APUE/8_process_control/build/CMakeFiles/pid.dir
+/mnt/hgfs/VmShare/APUE/APUE/8_process_control/build/CMakeFiles/process_status.dir
+/mnt/hgfs/VmShare/APUE/APUE/8_process_control/build/CMakeFiles/tell_wait1.dir
+/mnt/hgfs/VmShare/APUE/APUE/8_process_control/build/CMakeFiles/tell_wait2.dir
+/mnt/hgfs/VmShare/APUE/APUE/8_process_control/build/CMakeFiles/vfork.dir
