@@ -10,16 +10,16 @@ int main(void)
 {
     pid_t	pid;
 
-    TELL_WAIT();
+    TELL_WAIT();  //设置当前进程阻塞usr1, usr2信号
 
     if ((pid = fork()) < 0) {
         err_sys("fork error");
     } else if (pid == 0) {
-        WAIT_PARENT();		/* parent goes first */
+        WAIT_PARENT();		/* parent goes first */  //等待信号处理程序设置全局变量
         charatatime("output from child\n");
     } else {
         charatatime("output from parent\n");
-        TELL_CHILD(pid);
+        TELL_CHILD(pid);  //向子进程发送usr1信号
     }
     exit(0);
 }

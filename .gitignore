@@ -60,3 +60,8 @@ dkms.conf
 5_stdio/cmake-build-debug
 7_process_env/cmake-build-debug
 8_process_control/cmake-build-debug
+8_process_control/build
+10_signal/build
+10_signal/cmake-build-debug
+11_thread/build
+11_thread/cmake-build-debug
