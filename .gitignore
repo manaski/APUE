@@ -65,3 +65,4 @@ dkms.conf
 10_signal/cmake-build-debug
 11_thread/build
 11_thread/cmake-build-debug
+12_thread_control/cmake-build-debug

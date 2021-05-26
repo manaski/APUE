@@ -45,7 +45,7 @@ void job_insert(queue* qp, job* jp) {
  * 在尾部插入job
  */
 void job_append(queue* qp, job* jp) {
-    pthread_rwlock_wrlock(&qp->q_lock);
+    pthread_rwlock_wrlock(&qp->q_lock); //写锁
     jp->j_prev = qp->q_tail;
     jp->j_next = NULL;
 
@@ -57,3 +57,37 @@ void job_append(queue* qp, job* jp) {
     pthread_rwlock_unlock(&qp->q_lock);
 }
 
+/*
+ * 删除job
+ */
+void job_remove(queue* qp, job* jp) {
+    pthread_rwlock_wrlock(&qp->q_lock); //读锁
+    if (qp->q_head == jp) {
+        qp->q_head = jp->j_next;
+        if (qp->q_tail == jp)
+            qp->q_tail = NULL;
+        else
+            jp->j_next->j_prev = jp->j_prev;
+    } else if (qp->q_tail == jp) {
+        qp->q_tail = jp->j_prev;
+        jp->j_prev->j_next = jp->j_next;
+    } else {
+        jp->j_prev->j_next = jp->j_next;
+        jp->j_next->j_prev = jp->j_prev;
+    }
+    pthread_rwlock_unlock(&qp->q_lock);
+}
+
+/*
+ * find job
+ */
+job* job_find(queue* qp, pthread_t job_id) {
+    if (pthread_rwlock_rdlock(&qp->q_lock) != 0)
+        return NULL;
+
+    job* jp = qp->q_head;
+    while (jp != NULL && jp->pid != job_id)
+        jp = jp->j_next;
+    pthread_rwlock_unlock(&qp->q_lock);
+    return jp;
+}
