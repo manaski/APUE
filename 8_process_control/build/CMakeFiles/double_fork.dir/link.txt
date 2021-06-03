@@ -1,1 +1,0 @@
-/usr/bin/cc    CMakeFiles/double_fork.dir/double_fork.c.o CMakeFiles/double_fork.dir/mnt/hgfs/VmShare/APUE/APUE/include/error.c.o CMakeFiles/double_fork.dir/mnt/hgfs/VmShare/APUE/APUE/lib/tellwait.c.o  -o double_fork 
