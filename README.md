@@ -3761,5 +3761,178 @@ int main(void) {
 
 ### 15.4 FIFO
 
-FIFO有时被称为命名管道。通过FIFO，不相关的进程也能交换数据。
+FIFO有时被称为命名管道，通过FIFO不相关的进程也能交换数据。
+
+若写一个尚无进程为读而打开的 FIFO，则产生信号SIGPIPE。
+
+若某个FIFO的最后一个写进程关闭了该FIFO，则将为该FIFO的读进程产生一个文件结束标志。
+
+FIFO的两个用途：
+
+- 复制sell命令中的输出流，不需要创建中间临时文件。
+- 在客户进程和服务器进程二者之间传递数据。
+
+例子1
+
+```shell
+mkfifo fifo1
+prog3 < fifo1 &
+prog1 < infile | tee fifo1 | prog2
+```
+
+tee的输出数据被复制了一份。数据流向为
+
+```
+infile->prog1->tee->fifo1->prog3
+                |->prog2
+```
+
+
+
+### 15.5  XIS IPC
+
+XSI(X/Open System Interface) IPC包括三种，消息队列，信号量及共享存储器。
+
+**标识符**
+
+每个内核中的 IPC 结构（消息队列、 信号量或共享存储段）都用一个非负整数的标识符加以引用。
+
+标识符是IPC对象的内部名；每个IPC对象都与一个键相关联，将这个键作为该对象的外部名。
+
+XSI IPC为每一个IPC结构关联了一个ipc_perm结构，该结构规定了权限和所有者。
+
+**IPC的问题**
+
+IPC结构是在系统范围内起作用的，没有引用计数。如果创建消息队列的进程退出，该消息队列及其内容不会被删除。
+
+这些IPC结构在文件系统中没有名字，无法使用针对文件系统的操作，所以需要单独的系统调用。
+
+### 15.6 消息队列
+
+消息队列是消息的链接表，存储在内核中，由消息队列标识符标识。消息队列最初是为了提高速度的，和现在的IPC相比已经效果有限。考虑到IPC存在的问题，不建议使用。
+
+**相关操作**
+
+msgget 用于创建一个新队列或打开一个现有队列。
+
+msgsnd 将新消息添加到队列尾端。
+
+msgsnd 把消息添加到队列，msgrcv 用于从队列中取消息。不一定要以先进先出次序取消息，也可以按消息的类型字段取消息。
+
+
+
+### 15.7 信号量
+
+信号量是一个计数器，用于为多个进程提供对共享数据对象的访问。
+
+使用信号量访问共享数据的过程
+
+```
+1. 测试控制该资源的信号量。
+2. 若此信号量的值为正，则进程可以使用该资源。在这种情况下进程会将信号量值减1，表示它使用了一个资源单位。
+3. 否则若此信号量的值为0，则进程进入休眠状态，直至信号量值大于0。 进程被唤醒后，它返回至步骤1。
+```
+
+信号量的使用接口比较复杂，因为信号量必需定义为含有一个或多个信号量值的集合，不能原子地创建一个信号量集，并且需要考虑IPC存在的问题。
+
+**信号量与互斥量，记录锁对比**
+
+互斥量，把进程共享互斥量属性设置为PTHREAD_PROCESS_SHARED。当持有互斥量的进程终止时，需要解决互斥量状态恢复的问题。
+
+记录锁，则先创建一个空文件，并且用该文件的第一个字节（无需存在）作为锁字节。当一个进程终止时， 它所建立的锁全部释放。
+
+信号量，先创建信号量集合并初始化。对每个操作都指定SEM_UNDO，由内核处理在未释放资源条件下进程终止的情况。
+
+**结论**
+
+在Linux上，记录锁比信号量快，但是共享存储中的互斥量的性能比信号量和记录锁的都要优越。
+
+记录锁使用比信号量简单，当进程终止时系统会管理遗留下来的锁，而共享存储中的互斥量下进程恢复很难处理。
+
+### 15.8 共享存储
+
+共享存储允许两个或多个进程共享一个给定的存储区。这是最快的一种 IPC，但是需要在多个进程之间同步访问一个给定的存储区。
+
+XSI共享存储和mmap内存映射不同之处在于，前者没有相关的文件，XSI共享存储段是内存的匿名段。
+
+例子，打印不同类型存储地址
+
+```c
+#include "apue.h"
+#include <sys/shm.h>
+
+#define ARRAY_SIZE  40000
+#define MALLOC_SIZE 100000
+#define SHM_SIZE  100000
+#define SHM_MODE  0600
+
+char array[ARRAY_SIZE];  //全局变量，堆空间
+
+int main(void) {
+
+    int shmid;  //自动变量在栈上
+    char *ptr, *shmptr;
+
+    printf("array[] from %p to %p\n", (void*)&array[0], (void *)&array[ARRAY_SIZE]);
+    printf("stack around %p\n", (void *)&shmid);
+
+    if ((ptr = malloc(MALLOC_SIZE)) == NULL)  //在堆空间分配
+        err_sys("malloc error");
+    printf("malloced from %p to %p\n", (void *)ptr, (void *)ptr + MALLOC_SIZE);  //void *  转成字节指针
+
+    if ((shmid = shmget(IPC_PRIVATE, SHM_SIZE, SHM_MODE)) < 0)  //共享存储，在堆和栈之间，未定义段
+        err_sys("shmget error");
+    if ((shmptr = shmat(shmid, 0, 0)) == (void *)-1)
+        err_sys("shmat error");
+    printf("shared memory from %p to %p\n", (void *)shmptr, (void *)shmptr + SHM_SIZE);
+
+    if (shmctl(shmid, IPC_RMID, 0) < 0)
+        err_sys("shmctl error");
+
+    exit(0);
+}
+```
+
+结果
+
+```
+array[] from 0x10309b0a0 to 0x1030a4ce0
+stack around 0x7ffeecb6c7b8
+malloced from 0x7f81fa500000 to 0x7f81fa5186a0
+shared memory from 0x1030c4000 to 0x1030dc6a0
+```
+
+回忆7.5中的存储空间结构
+
+```
+高地址
+----------------------
+命令行参数和环境变量
+栈 -->shmid;
+|
+共享存储 --> shmget
+|
+堆  ---> malloc
+未初始化数据段（bss）--> array[]
+初始化数据段
+正文
+------------------------
+低地址
+```
+
+存储映射的对比
+
+可以使用/dev/zero作为设备，调用mmap创建映射区。这种方式同样无需存在一个实际文件，但是只在两个相关进程之间起作用。
+
+在两个无关进程之间要使用共享存储段，一是应用程序使用XSI共享存储函数，或者使用mmap将同一文件映射至它们的地址空间，并使用MAP_SHARED标志。
+
+### 15.9 POSIX信号量
+
+POSIX信号量接口意在解决XSI信号量接口的缺陷。
+
+- 考虑到了更高性能的实现
+- 接口使用更简单
+- 在删除时表现更完美
+
+POSIX信号量有命名的和未命名的。前者只能被在同一进程内线程访问；后者能被其他进程通过名字访问。
 
