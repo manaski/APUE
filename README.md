@@ -4132,7 +4132,7 @@ int main(int argc, char *argv[]) {
 
 服务器调用listen函数来宣告它愿意接受连接请求。使用accept函数获得连接请求并建立连接。
 
-例子，从服务器获取uptime
+#### 16.3.1 **有连接的例子**
 
 服务器端，运行后成为后台进程。在/etc/services中添加ruptime服务信息，指定一个端口，否则客户端找不到服务。
 
@@ -4278,4 +4278,385 @@ main(int argc, char *argv[])
 - 数据包的最大尺寸不同
 - 无连接套接字可能会丢失
 
-无连接例子
+#### 16.3.2 **无连接例子**
+
+服务器端，在启动之前，要修改/etc/services，添加ruptime的udp服务
+
+```c
+#include "apue.h"
+#include <netdb.h>
+#include <errno.h>
+#include <syslog.h>
+#include <sys/socket.h>
+
+#define BUFLEN	128
+#define MAXADDRLEN 256
+
+#ifndef HOST_NAME_MAX
+#define HOST_NAME_MAX 256
+#endif
+
+extern int initserver(int, const struct sockaddr *, socklen_t, int);
+
+void
+serve(int sockfd)
+{
+  int		n;
+  socklen_t alen;
+  FILE	*fp;
+  char	buf[BUFLEN];
+  char abuf[MAXADDRLEN];  //数组内存已经分配好了
+  struct sockaddr  *addr = (struct sockaddr *)abuf; //转换为sockaddr类型
+
+  set_cloexec(sockfd);
+  for(;;) {
+    alen = MAXADDRLEN;
+    if ((n = recvfrom(sockfd, buf, BUFLEN, 0, addr, &alen)) <0) { //从监听套接字读取数据，addr保存客户端地址
+      syslog(LOG_ERR, "ruptimed: recvfrom error: %s", strerror(errno));
+      exit(1);
+    }
+
+    if ((fp = popen("/usr/bin/uptime", "r")) == NULL) {
+      sprintf(buf, "error: %s\n", strerror(errno));
+      sendto(sockfd, buf, strlen(buf), 0, addr, alen);  //向客户端地址发送数据，sockfd指服务端套接字
+    } else {
+      if (fgets(buf, BUFLEN, fp) != NULL)
+        sendto(sockfd, buf, strlen(buf), 0, addr, alen);
+      pclose(fp);
+    }
+  }
+}
+
+int
+main(int argc, char *argv[])
+{
+  struct addrinfo	*ailist, *aip;
+  struct addrinfo	hint;
+  int				sockfd, err, n;
+  char			*host;
+
+  if (argc != 1)
+    err_quit("usage: ruptimed");
+  if ((n = sysconf(_SC_HOST_NAME_MAX)) < 0)
+    n = HOST_NAME_MAX;	/* best guess */
+  if ((host = malloc(n)) == NULL)
+    err_sys("malloc error");
+  if (gethostname(host, n) < 0)
+    err_sys("gethostname error");
+  daemonize("ruptimed");   //服务进程设置成守护进程
+  memset(&hint, 0, sizeof(hint));
+  hint.ai_flags = AI_CANONNAME;  //返回标准名
+  hint.ai_socktype = SOCK_DGRAM;
+  hint.ai_canonname = NULL;
+  hint.ai_addr = NULL;
+  hint.ai_next = NULL;
+  if ((err = getaddrinfo(host, "ruptime", &hint, &ailist)) != 0) {  //查询本机服务信息，这里需要提前添加ruptime到/etc/services
+    syslog(LOG_ERR, "ruptimed: getaddrinfo error: %s",
+           gai_strerror(err));
+    exit(1);
+  }
+  for (aip = ailist; aip != NULL; aip = aip->ai_next) {
+    if ((sockfd = initserver(SOCK_DGRAM, aip->ai_addr,
+                             aip->ai_addrlen, 0)) >= 0) { //初始化服务器监听socket
+      serve(sockfd); //接受请求并响应
+      exit(0);
+    }
+  }
+  exit(1);
+}
+```
+
+客户端
+
+```c
+#include "apue.h"
+#include <sys/socket.h>
+#include <netdb.h>
+#include <errno.h>
+
+#define BUFLEN  128
+#define TIMEOUT  20
+
+void sigalrm(int signo) {
+
+}
+
+void print_uptime(int sockfd, struct addrinfo *aip) {
+  int n;
+  char buf[BUFLEN];
+
+  buf[0] = 0;
+  if (sendto(sockfd, buf, 1, 0, aip->ai_addr, aip->ai_addrlen) < 0) //向服务器地址发送数据，服务器向sockfd返回数据
+    err_sys("sendto error");
+  alarm(TIMEOUT);  //设置定时器
+  if ((n = recvfrom(sockfd, buf, BUFLEN, 0, NULL, NULL)) < 0) {  //等待从sockfd返回数据，直到超时
+    if (errno != EINTR)
+      alarm(0);
+    err_sys("recv error");
+  }
+  alarm(0);
+  write(STDOUT_FILENO, buf, n);  //写入标准输出
+}
+
+int main(int argc, char *argv[]) {
+  struct addrinfo *ailist, *aip;
+  struct addrinfo hint;
+  int sockfd, err;
+  struct sigaction sa;
+
+  if (argc != 2)
+    err_quit("usage: ruptime hostname");
+
+  sa.sa_handler = sigalrm;
+  sa.sa_flags = 0;
+  sigemptyset(&sa.sa_mask);  //清空设置
+  if (sigaction(SIGALRM, &sa, NULL) < 0)  //添加对警告时钟的处理函数
+    err_sys("sigaction error");
+
+  memset(&hint, 0, sizeof(hint));
+  hint.ai_socktype = SOCK_DGRAM;  //数据报
+  hint.ai_canonname = NULL;
+  hint.ai_addr = NULL;
+  hint.ai_next = NULL;
+  if ((err = getaddrinfo(argv[1], "ruptime", &hint, &ailist)) != 0) //获取提供数据报服务的地址
+    err_quit("getaddrinfo error: %s", gai_strerror(err));
+
+  for (aip = ailist; aip != NULL; aip = aip->ai_next) {
+    if ((sockfd = socket(aip->ai_family, SOCK_DGRAM, 0)) < 0) {  //创建socket
+      err = errno;
+    } else {
+      print_uptime(sockfd, aip);
+      exit(0);
+    }
+  }
+
+  fprintf(stderr, "can't contact %s: %s\n", argv[1], strerror(err));
+  exit(1);
+}
+```
+
+
+
+### 16.4 套接字选项
+
+套接字可以设置和查询选项，来控制套接字的特性。
+
+例子
+
+```c
+#include <sys/socket.h>
+#include "apue.h"
+#include <errno.h>
+
+int initserver(int type, struct sockaddr *addr, socklen_t alen, int qlen) {
+  int fd, err;
+  int reuse = 1;
+
+  if ((fd = socket(addr->sa_family, type, 0)) < 0)  //创建套接字
+    return -1;
+  //SOL_SOCKET  通用套接字选项
+  //IPPROTO_TCP  TCP选项
+  //IPPROTO_IP  IP选项
+  if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)))
+  if (bind(fd, addr, alen) < 0) {  //把套接字和传入的地址绑定，传入的地址对应对外提供的服务
+    printf("bind error");
+    goto errout;
+  }
+
+  if (type == SOCK_STREAM || type == SOCK_SEQPACKET) {
+    if (listen(fd, qlen) < 0) {  //表示套接字可以进行监听请求，qlen指定监听队列长度
+      printf("listen error");
+      goto errout;
+    }
+  }
+  return fd;  //返回创建好的套接字
+  errout:
+  err = errno;
+  close(fd);
+  errno = err;
+  return -1;
+}
+```
+
+
+
+### 16.5  带外数据
+
+带外数据是一些通信协议支持的可选功能，比普通数据以更高优先级传输。带外数据先行传输，即使传输队列已经有数据。
+
+TCP支持带外数据，但是UDP不支持。TCP仅支持一个字节的紧急数据，但是允许紧急数据在普通数据传递机制数据流之外传输。
+
+### 16.6 非阻塞和异步IO
+
+recv 函数没有数据可用时会阻塞等待。当套接字输出队列没有足够空间来发送消息时，send 函数会阻塞。
+
+在套接字非阻塞模式下，行为会改变。
+
+在基于套接字的异步I/O中，当从套接字中读取数据时，或者当套接字写队列中空间变得可用时，可以安排要发送的信号SIGIO。
+
+## 17. 高级进程间通信
+
+### 17.1 Unix域套接字
+
+UNIX 域套接字用于在同一台计算机上运行的进程之间的通信。UNIX 域套接字就像是套接字和管道的混合。一对相互连接的UNIX域套接字可以起到全双工管道的作用。
+
+和网络套接字相比：
+
+- 在同一计算机上使用，效率更高；
+- 仅复制数据，不进行协议处理；
+- 域套接字提供流和数据报两种接口，数据报服务是可靠的；
+
+**借助UNIX域套接字轮询XSI消息队列**
+
+创建消息队列，监听消息
+
+```c
+#include "apue.h"
+#include <netdb.h>
+#include <sys/msg.h>
+#include <poll.h>
+#include <pthread.h>
+
+#define NQ  3    /*队列长度*/
+#define MAXMSZ  512   /*最大消息数*/
+#define KEY  0x123    /* 第一个消息队列编号*/
+
+struct threadinfo {
+  int qid;
+  int fd;
+};
+
+struct mymesg {
+  long mtype;
+  char mtext[MAXMSZ];
+};
+
+void * helper(void *arg)
+{
+  int n;
+  struct mymesg  m;
+  struct threadinfo *tip = arg;
+
+  for(;;) {
+    memset(&m, 0, sizeof(m));
+    if ((n = msgrcv(tip->qid, &m, MAXMSZ, 0, MSG_NOERROR)) < 0)
+      err_sys("msgrcv error");
+    if (write(tip->fd, m.mtext, n) < 0)
+      err_sys("write error");
+  }
+}
+
+int main() {
+  int i, n, err;
+  int fd[2];
+  int qid[NQ];
+  struct pollfd pfd[NQ];
+  struct threadinfo ti[NQ];
+  pthread_t tid[NQ];
+  char buf[MAXMSZ];
+
+  for (i = 0; i < NQ; i++) {
+    if ((qid[i] = msgget(KEY + i, IPC_CREAT|0666)) < 0)
+      err_sys("msgget error");
+
+    printf("queue ID %d is %d\n", i, qid[i]);
+
+    if (socketpair(AF_UNIX, SOCK_DGRAM, 0, fd) < 0)  //创建连接，fd[0], fd[1]通过匿名套接字双向连接
+      err_sys("socketpair error");
+
+    pfd[i].fd = fd[0]; //访问读端
+    pfd[i].events = POLLIN;  //关注的事件是IN
+    ti[i].qid = qid[i];  //每个消息队列一个线程
+    ti[i].fd = fd[1];   //消息队列使用写端
+    if ((err = pthread_create(&tid[i], NULL, helper, &ti[i])) != 0)  //创建线程，并执行helper
+      err_exit(err, "pthread_create error");
+  }
+
+  for(;;) {
+    if (poll(pfd, NQ, -1) < 0)  //poll监听事件，看读端是否可以读数据
+      err_sys("poll error");
+
+    for (i = 0; i < NQ; ++i) {
+      if ((pfd[i].revents & POLLIN)) {  //如果接收到了输入
+        if ((n = read(pfd[i].fd, buf, sizeof(buf))) < 0)  //从对应fd读取数据到buf
+          err_sys("read error");
+        buf[n] = 0; //添加结尾\0
+        printf("queue id %d, message %s\n", qid[i], buf);
+      }
+    }
+  }
+
+  exit(0);
+}
+```
+
+发送消息到消息队列
+
+```c
+#include "apue.h"
+#include <sys/msg.h>
+
+#define MAXMSZ 512
+
+struct mymsg {
+  long mtype;
+  char mtext[MAXMSZ];
+};
+
+int main(int argc, char *argv[]) {
+  key_t key;
+  long qid;
+  size_t nbytes;
+  struct mymsg m;
+
+  if (argc != 3) {
+    fprintf(stderr, "usage: sendmsg KEY message\n");
+    exit(1);
+  }
+  key = strtol(argv[1], NULL, 0);
+  if ((qid = msgget(key, 0)) < 0)  //创建或打开一个消息队列，返回队列id
+    err_sys("can't open queue key %s", argv[1]);
+
+  memset(&m, 0, sizeof(m));
+  strncpy(m.mtext, argv[2], MAXMSZ - 1);
+  nbytes = strlen(m.mtext);
+  m.mtype = 1;
+  if (msgsnd(qid, &m, nbytes, 0) < 0)
+    err_sys("can't send message");
+  exit(0);
+}
+```
+
+**命名UNIX域套接字**
+
+socketpair函数创建一对相互连接的套接字，但是每一个套接字都没有名字。可以把域套接字绑定到一个路径地址，系统会用该路径名创建一个S_IFSOCK类型的文件。
+
+例子
+
+```c
+#include "apue.h"
+#include <sys/socket.h>
+#include <sys/un.h>
+
+int main(void)
+{
+  int fd, size;
+  struct sockaddr_un un;
+
+  un.sun_family = AF_UNIX;
+  strcpy(un.sun_path, "foo.socket");
+  if ((fd = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0)
+    err_sys("socket failed");
+  size = offsetof(struct sockaddr_un, sun_path) + strlen(un.sun_path);
+  if (bind(fd, (struct sockaddr *)&un, size) < 0)
+    err_sys("bind failed");
+  printf("UNIX domain socket bound\n");
+  exit(0);
+}
+```
+
+
+
+### 17.2 唯一连接
+
+基于命名UNIX域套接字，可以类似网络套接字一样在同一计算机内的两个进程间建立唯一连接。
