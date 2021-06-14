@@ -16,6 +16,9 @@ file(GLOB files "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
 
 foreach(file ${files})
     get_filename_component(name ${file} NAME)
+    if (${name} STREQUAL "openv1.c")
+        continue()
+    endif ()
     string(REPLACE ".c" "" name ${name})
     #添加到可执行文件中
     add_executable(${name} ${file} ../include/error.c

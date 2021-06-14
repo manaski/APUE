@@ -1,7 +1,8 @@
 #include "apue.h"
-#include <sys/socket.h>		/* struct msghdr */
+#include <sys/socket.h>
 
 /* size of control buffer to send/recv one file descriptor */
+#define CMSG_LEN(l)             (__DARWIN_ALIGN32(sizeof(struct cmsghdr)) + (l))
 #define	CONTROLLEN	CMSG_LEN(sizeof(int))
 
 #ifdef LINUX
@@ -30,7 +31,7 @@ recv_fd(int fd, ssize_t (*userfunc)(int, const void *, size_t))
 	for ( ; ; ) {
 		iov[0].iov_base = buf;
 		iov[0].iov_len  = sizeof(buf);
-		msg.msg_iov     = iov;
+		msg.msg_iov     = iov;  //分配信息缓存空间
 		msg.msg_iovlen  = 1;
 		msg.msg_name    = NULL;
 		msg.msg_namelen = 0;
@@ -38,7 +39,7 @@ recv_fd(int fd, ssize_t (*userfunc)(int, const void *, size_t))
 			return(-1);
 		msg.msg_control    = cmptr;
 		msg.msg_controllen = CONTROLLEN;
-		if ((nr = recvmsg(fd, &msg, 0)) < 0) {
+		if ((nr = recvmsg(fd, &msg, 0)) < 0) {  //从fd接收消息
 			err_ret("recvmsg error");
 			return(-1);
 		} else if (nr == 0) {

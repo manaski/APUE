@@ -77,3 +77,10 @@ dkms.conf
 16_network_ipc/build
 17_advance_ipc/build
 17_advance_ipc/cmake-build-debug
+17_advance_ipc/open/cmake-build-debug
+17_advance_ipc/open/build
+17_advance_ipc/open.fe/cmake-build-debug
+17_advance_ipc/open.fe/build
+17_advance_ipc/opend/cmake-build-debug
+17_advance_ipc/opend/build
+17_advance_ipc/opend.fe/cmake-build-debug

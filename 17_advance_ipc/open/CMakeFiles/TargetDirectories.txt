@@ -1,0 +1,7 @@
+/Users/lifan/VmShare/APUE/APUE/17_advance_ipc/open/CMakeFiles/rebuild_cache.dir
+/Users/lifan/VmShare/APUE/APUE/17_advance_ipc/open/CMakeFiles/edit_cache.dir
+/Users/lifan/VmShare/APUE/APUE/17_advance_ipc/open/CMakeFiles/sendmsg.dir
+/Users/lifan/VmShare/APUE/APUE/17_advance_ipc/open/CMakeFiles/bindsocket.dir
+/Users/lifan/VmShare/APUE/APUE/17_advance_ipc/open/CMakeFiles/server.dir
+/Users/lifan/VmShare/APUE/APUE/17_advance_ipc/open/CMakeFiles/pollmsg.dir
+/Users/lifan/VmShare/APUE/APUE/17_advance_ipc/open/CMakeFiles/client.dir
