@@ -4656,7 +4656,202 @@ int main(void)
 ```
 
 
-
 ### 17.2 唯一连接
 
-基于命名UNIX域套接字，可以类似网络套接字一样在同一计算机内的两个进程间建立唯一连接。
+基于命名UNIX域套接字，可以类似网络套接字一样在同一计算机内的两个进程间建立唯一连接。不同的是UNIX域套接字的连接命名是基于文件的，通过文件名标识一个套接字地址。
+
+例子，serv_listen，serv_accept，cli_conn的实现在apue/lib库文件中。
+
+```
+服务端  socket->bind->listen->accept
+客户端  socket[->bind]->connect
+```
+
+
+
+服务器端
+
+```c
+#include "apue.h"
+
+int main(int argc, char *argv[]) {
+  int fd, fd2;
+  uid_t uid;
+
+  if (argc != 2)
+    err_sys("usage server name");
+  fd = serv_listen(argv[1]);
+  uid = 123;
+  for(;;) {
+    fd2 = serv_accept(fd, &uid);
+    printf("accept %d\n", fd2);
+    uid = uid + 1;
+  }
+
+  exit(0);
+}
+```
+
+客户端
+
+```c
+#include "apue.h"
+
+int main(int argc, char *argv[]) {
+  if (argc != 2)
+    err_sys("usage: client name");
+   cli_conn(argv[1]);
+}
+```
+
+### 17.3 传送文件描述符
+
+当一个进程向另一个进程传送一个打开文件描述符时，可以让发送进程和接收进程共享同一文件表项。接收进程分配第一个可用的描述符项，因此发送进程和接收进程中的描述符编号通常是不同的。
+
+```
+当一个进程（通常是服务器进程）想将一个描述符传送给另一个进程时，可以调用send_fd或send_err。 
+等待接收描述符的进程（客户进程）调用recv_fd。
+```
+
+下面看一下代码具体实现。这个实现是自定义协议的实现，只是示例。
+
+**send_fd**
+
+```c
+#include "apue.h"
+#include <sys/socket.h>
+
+/* size of control buffer to send/recv one file descriptor */
+#define	CONTROLLEN	CMSG_LEN(sizeof(int))
+
+static struct cmsghdr	*cmptr = NULL;	/* malloc'ed first time */
+
+/*
+ * Pass a file descriptor to another process.
+ * If fd<0, then -fd is sent back instead as the error status.
+ */
+int
+send_fd(int fd, int fd_to_send)
+{
+	struct iovec	iov[1];   //iovec表示io缓存buf
+	struct msghdr	msg;   //包含了要发送或接受的消息
+	char			buf[2];	/* send_fd()/recv_fd() 2-byte protocol */
+
+	iov[0].iov_base = buf;   //在2字节0之后开始
+	iov[0].iov_len  = 2;   //长度为2字节
+	msg.msg_iov     = iov;
+	msg.msg_iovlen  = 1;  //数组长度1
+	msg.msg_name    = NULL;
+	msg.msg_namelen = 0;
+
+	if (fd_to_send < 0) {  //如果fd为负数
+		msg.msg_control    = NULL;
+		msg.msg_controllen = 0;
+		buf[1] = -fd_to_send;	/* nonzero status means error */
+		if (buf[1] == 0)
+			buf[1] = 1;	/* -256, etc. would screw up protocol */
+	} else {
+		if (cmptr == NULL && (cmptr = malloc(CONTROLLEN)) == NULL)
+			return(-1);
+		cmptr->cmsg_level  = SOL_SOCKET;  //控制级别为套接字
+		cmptr->cmsg_type   = SCM_RIGHTS;  //传送访问权
+		cmptr->cmsg_len    = CONTROLLEN;
+		msg.msg_control    = cmptr;  //控制信息头
+		msg.msg_controllen = CONTROLLEN;
+		*(int *)CMSG_DATA(cmptr) = fd_to_send;		/* the fd to pass */
+		buf[1] = 0;		/* zero status means OK */
+	}
+
+	buf[0] = 0;			/* null byte flag to recv_fd() */
+	if (sendmsg(fd, &msg, 0) != 2)   //发送消息，fd是建好连接的套接字
+		return(-1);
+	return(0);
+}
+```
+
+
+
+### 17.4 open服务器进程
+
+利用文件描述符传输技术开发一个服务，实现服务器进程从客户进程到服务器进程传送文件名和打开模式，而从服务器进程到客户进程返回描述符。 文件内容不需通过IPC交换。
+
+服务器进程有两种执行方式，一是由客户端进程执行生成；一是作为守护进程执行。
+
+客户端fork生成
+
+```c
+#include	"open.h"
+#include	<fcntl.h>
+
+#define	BUFFSIZE	8192
+
+/*
+ *  客户端程序 1
+ */
+int main(int argc, char *argv[])
+{
+	int		n, fd;
+	char	buf[BUFFSIZE];
+	char	line[MAXLINE];
+
+	/* read filename to cat from stdin */
+	while (fgets(line, MAXLINE, stdin) != NULL) {
+		if (line[strlen(line) - 1] == '\n')
+			line[strlen(line) - 1] = 0; /* replace newline with null */
+
+		/* open the file */
+		if ((fd = csopen(line, O_RDONLY)) < 0)  //fork子进程执行服务端功能
+			continue;	/* csopen() prints error from server */
+
+		/* and cat to stdout */
+		while ((n = read(fd, buf, BUFFSIZE)) > 0)
+			if (write(STDOUT_FILENO, buf, n) != n)
+				err_sys("write error");
+		if (n < 0)
+			err_sys("read error");
+		close(fd);
+	}
+
+	exit(0);
+}
+```
+
+守护进程
+
+```c
+#include	"opend.h"
+#include	<syslog.h>
+
+int		 debug, oflag, client_size, log_to_stderr;
+char	 errmsg[MAXLINE];
+char	*pathname;
+Client	*client = NULL;
+
+/*
+ *  服务器进程2
+ */
+int main(int argc, char *argv[])
+{
+	int		c;
+
+	log_open("open.serv", LOG_PID, LOG_USER);
+
+	opterr = 0;		/* don't want getopt() writing to stderr */
+	while ((c = getopt(argc, argv, "d")) != EOF) {  //遍历检查函数参数，d表示守护进程
+		switch (c) {
+		case 'd':		/* debug */
+			debug = log_to_stderr = 1;   // debug = log_to_stderr; log_to_stderr = 1;
+			break;
+
+		case '?':
+			err_quit("unrecognized option: -%c", optopt);
+		}
+	}
+
+	if (debug == 0)
+		daemonize("opend");  //转为守护进程，父进程关闭
+
+	loop();		/* never returns */
+}
+```
+
